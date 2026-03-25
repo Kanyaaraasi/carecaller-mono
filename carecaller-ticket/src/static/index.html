@@ -61,20 +61,20 @@
 <body class="min-h-screen font-sans text-sm" x-data="dashboard()" x-init="init()">
 
   <!-- STATUS BAR -->
-  <header class="panel border-t-0 border-x-0 px-4 py-2 flex items-center justify-between text-xs" style="color: var(--muted-foreground)">
-    <div class="flex items-center gap-2 mono">
+  <header class="panel border-t-0 border-x-0 px-3 md:px-4 py-2 flex items-center justify-between text-xs overflow-x-auto" style="color: var(--muted-foreground)">
+    <div class="flex items-center gap-2 mono shrink-0">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 shrink-0" style="color: var(--primary)">
         <path d="M16.5 3C19.538 3 22 5.5 22 9c0 7-7.5 11-10 12.5C9.5 20 2 16 2 9c0-3.5 2.462-6 5.5-6C9.36 3 11.048 3.695 12 4.628 12.952 3.695 14.64 3 16.5 3Zm-3.043 9.408L12 14.4l-1.457-1.992-1.2-1.637L8.2 12.3l-1.2 1.637H3.522A14.455 14.455 0 0 0 6 18.118L12 21.5l6-3.382c1.072-.768 1.835-1.476 2.478-2.218h-3.478l-1.2-1.637-1.2 1.637-1.457-1.992-.686-.937-.686.937L12 16l-1.457-1.992-1.086-1.483 1.086-1.483L12 9.05l1.457 1.992 1.086 1.483-1.086 1.483Z"/>
       </svg>
       <span class="font-bold" style="color: var(--foreground)">CARECALLER</span>
       <span style="color: var(--border)">│</span>
       <span>AUTOFLAGGER</span>
-      <span style="color: var(--border)">│</span>
-      <span x-show="stats" x-text="stats?.model?.toUpperCase() + ' depth=' + (stats?.model_params?.max_depth || '?')"></span>
-      <span style="color: var(--border)">│</span>
-      <span x-show="stats" x-text="stats?.feature_count + ' features'"></span>
-      <span style="color: var(--border)">│</span>
-      <span x-show="stats">thresh: <span style="color: var(--chart-4)" x-text="stats?.threshold?.toFixed(3)"></span></span>
+      <span class="hidden md:inline" style="color: var(--border)">│</span>
+      <span class="hidden md:inline" x-show="stats" x-text="stats?.model?.toUpperCase() + ' depth=' + (stats?.model_params?.max_depth || '?')"></span>
+      <span class="hidden lg:inline" style="color: var(--border)">│</span>
+      <span class="hidden lg:inline" x-show="stats" x-text="stats?.feature_count + ' features'"></span>
+      <span class="hidden md:inline" style="color: var(--border)">│</span>
+      <span class="hidden md:inline" x-show="stats">thresh: <span style="color: var(--chart-4)" x-text="stats?.threshold?.toFixed(3)"></span></span>
     </div>
     <div class="flex items-center gap-3">
       <span class="w-1.5 h-1.5 rounded-full inline-block" style="background: var(--chart-1); animation: pulse 2s infinite"></span>
@@ -92,7 +92,7 @@
   <div x-show="stats" class="max-w-[1400px] mx-auto px-3 py-3 space-y-3 fade-up">
 
     <!-- STATS GRID -->
-    <div class="grid grid-cols-6 panel">
+    <div class="grid grid-cols-3 md:grid-cols-6 panel">
       <template x-for="(s, i) in [
         { label: 'CALLS', value: stats?.total_calls, color: '' },
         { label: 'FLAGGED', value: stats?.flagged_calls, sub: stats?.flagged_pct + '%', color: 'var(--destructive)' },
@@ -110,7 +110,7 @@
     </div>
 
     <!-- MIDDLE ROW: 3 panels -->
-    <div class="grid grid-cols-3 gap-3">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 
       <!-- CATEGORIES -->
       <div class="panel p-3">
@@ -175,7 +175,7 @@
     <!-- FEATURE IMPORTANCE -->
     <div class="panel p-3">
       <div class="text-[10px] uppercase tracking-widest mb-3 font-semibold" style="color: var(--muted-foreground)">Feature Importance</div>
-      <div class="grid grid-cols-3 gap-x-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
         <template x-for="col in [0, 1, 2]" :key="col">
           <div class="space-y-0.5">
             <template x-for="(feat, j) in importance.slice(col * 10, col * 10 + 10)" :key="feat.feature">
