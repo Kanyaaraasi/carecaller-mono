@@ -278,13 +278,12 @@
         <h3 class="text-xs font-semibold uppercase tracking-wider mb-4" style="color: var(--muted-foreground)">Transcript</h3>
         <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
           <template x-for="(turn, i) in call.transcript_turns || []" :key="i">
-            <div class="flex gap-3">
-              <span class="flex-shrink-0 inline-block w-6 h-6 rounded-full text-center text-xs leading-6 font-bold mt-0.5"
-                :style="turn.role === 'agent'
-                  ? 'background: oklch(0.627 0.194 149.214 / 20%); color: var(--chart-3)'
-                  : 'background: oklch(0.871 0.15 154.449 / 20%); color: var(--chart-1)'"
-                x-text="turn.role === 'agent' ? 'A' : 'U'"></span>
-              <div class="text-sm leading-relaxed" x-text="turn.text"></div>
+            <div class="font-mono text-xs leading-relaxed py-0.5"
+              :style="turn.role === 'agent' ? 'color: var(--muted-foreground)' : 'color: var(--foreground)'"><!--
+              --><span class="font-bold inline-block w-12"
+                :style="turn.role === 'agent' ? 'color: var(--muted-foreground)' : ''"
+                x-text="turn.role === 'agent' ? '[AGT]' : '[USR]'"></span>
+              <span x-text="turn.text"></span>
             </div>
           </template>
         </div>
@@ -295,13 +294,16 @@
           Questionnaire
           <span class="font-normal" style="color: var(--muted-foreground)" x-text="'(' + call.answered_count + '/14)'"></span>
         </h3>
-        <div class="space-y-2 max-h-96 overflow-y-auto pr-2">
+        <div class="max-h-96 overflow-y-auto pr-2 font-mono text-xs leading-relaxed">
           <template x-for="(r, i) in call.responses || []" :key="i">
-            <div class="p-3 rounded-lg text-sm"
-              :style="r.answer ? 'background: var(--secondary)' : 'background: oklch(0.704 0.191 22.216 / 5%); border: 1px solid oklch(0.704 0.191 22.216 / 10%)'">
-              <div class="text-xs mb-1" style="color: var(--muted-foreground)" x-text="'Q' + (i+1) + ': ' + r.question"></div>
-              <div :style="r.answer ? '' : 'color: var(--destructive); opacity: 0.6; font-style: italic'"
-                x-text="r.answer || 'No answer recorded'"></div>
+            <div class="py-0.5">
+              <span class="inline-block w-8 font-bold" style="color: var(--muted-foreground)" x-text="'Q' + String(i+1).padStart(2, '0')"></span>
+              <span style="color: var(--muted-foreground)" x-text="r.question"></span>
+              <br>
+              <span class="inline-block w-8"></span>
+              <span class="font-bold"
+                :style="r.answer ? 'color: var(--foreground)' : 'color: var(--destructive); opacity: 0.6'"
+                x-text="r.answer ? '→ ' + r.answer : '→ [EMPTY]'"></span>
             </div>
           </template>
         </div>

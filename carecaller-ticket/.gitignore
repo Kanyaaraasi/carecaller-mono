@@ -15,3 +15,5 @@ models/
 
 # Outputs (features, cache, submission)
 outputs/
+
+.pytest_cache
