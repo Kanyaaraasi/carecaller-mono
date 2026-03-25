@@ -1,0 +1,32 @@
+[project]
+name = "carecaller-ticket"
+version = "0.1.0"
+description = "Call Quality Auto-Flagger — CareCaller Hackathon 2026 Problem 1"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    # data & ml
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "xgboost",
+    "lightgbm",
+    # text / nlp signals
+    "jiwer",
+    "word2number",
+    # llm providers
+    "groq",
+    # nli
+    "transformers",
+    "torch",
+    # uncertainty
+    "mapie",
+    "pyarrow>=23.0.1",
+    "python-dotenv>=1.2.2",
+]
+
+[project.scripts]
+eda = "src.eda:main"
+extract = "src.features:main"
+train = "src.train:main"
+predict = "src.predict:main"
