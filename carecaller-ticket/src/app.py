@@ -54,7 +54,8 @@ def _load_state():
         # Category prediction
         categories = []
         for i, row in X.iterrows():
-            categories.append(predict_category(row) if pred[i] else "")
+            vn = str(df.iloc[i].get("validation_notes", "")) if pred[i] else ""
+            categories.append(predict_category(row, vn) if pred[i] else "")
 
         records = []
         for idx, (_, row) in enumerate(df.iterrows()):
@@ -205,7 +206,7 @@ def get_call_detail(call_id: str):
         # Probability
         proba = float(s["model"].predict_proba(X.loc[[idx]])[0, 1])
         predicted = proba >= s["threshold"]
-        category = predict_category(feat_row) if predicted else ""
+        category = predict_category(feat_row, str(row.get("validation_notes", ""))) if predicted else ""
 
         # Parse transcript into turns
         transcript = str(row.get("transcript_text", ""))
