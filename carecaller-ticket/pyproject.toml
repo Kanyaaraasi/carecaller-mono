@@ -11,18 +11,10 @@ dependencies = [
     "scikit-learn",
     "xgboost",
     "lightgbm",
+    "pyarrow",
     # text / nlp signals
     "jiwer",
     "word2number",
-    # llm providers
-    "groq",
-    # nli
-    "transformers",
-    "torch",
-    # uncertainty
-    "mapie",
-    "pyarrow>=23.0.1",
-    "python-dotenv>=1.2.2",
 ]
 
 [project.scripts]

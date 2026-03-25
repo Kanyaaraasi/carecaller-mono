@@ -67,10 +67,6 @@ CATEGORICAL_COLS = [
     "day_of_week",
 ]
 
-# --- LLM config ---
-DEFAULT_LLM_PROVIDER = "groq"
-DEFAULT_LLM_MODEL = "openai/gpt-oss-120b"
-
 # --- The 14 health check-in questions (canonical) ---
 HEALTH_QUESTIONS = [
     "How have you been feeling overall?",
