@@ -53,6 +53,7 @@ TEXT_COLS = [
 # --- Columns to drop before feature matrix (IDs + leakage + raw text + timestamps) ---
 DROP_COLS = LEAKAGE_COLS + ID_COLS + TEXT_COLS + [
     "patient_name_anon",
+    "patient_state",
     "attempted_at",
     "scheduled_at",
 ]
@@ -62,7 +63,6 @@ CATEGORICAL_COLS = [
     "outcome",
     "direction",
     "whisper_status",
-    "patient_state",
     "cycle_status",
     "day_of_week",
 ]

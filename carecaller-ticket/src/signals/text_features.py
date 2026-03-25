@@ -31,7 +31,7 @@ def _validation_notes_length(text: str) -> int:
 class TextFeatureExtractor:
     """Fit on train, transform on any split."""
 
-    def __init__(self, max_tfidf_features: int = 50):
+    def __init__(self, max_tfidf_features: int = 15):
         self.max_tfidf_features = max_tfidf_features
         self.tfidf_vn = TfidfVectorizer(
             max_features=max_tfidf_features,
