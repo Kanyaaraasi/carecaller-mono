@@ -1,0 +1,8 @@
+livekit-agent/
+__pycache__/
+*.pyc
+.env
+dist/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
