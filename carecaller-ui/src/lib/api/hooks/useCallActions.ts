@@ -1,18 +1,19 @@
 /**
  * Custom hook encapsulating all call lifecycle actions.
- * Extracted from ActiveCall.tsx to keep the page component thin.
+ * Supports both text mode and voice mode (Phase 5).
  */
 
 import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { useStartCall, useSendMessage, useEndCall } from "@/lib/api/hooks"
+import { useStartCall, useStartVoiceCall, useSendMessage, useEndCall } from "@/lib/api/hooks"
 import { useCallStore } from "@/stores/call-store"
 
 export function useCallActions(callId: string, patientId: string) {
   const navigate = useNavigate()
   const [messageInput, setMessageInput] = useState("")
   const startCall = useStartCall()
+  const startVoiceCall = useStartVoiceCall()
   const sendMessage = useSendMessage()
   const endCall = useEndCall()
 
@@ -21,6 +22,8 @@ export function useCallActions(callId: string, patientId: string) {
   const elapsed = useCallStore((s) => s.elapsed)
   const config = useCallStore((s) => s.config)
   const responses = useCallStore((s) => s.responses)
+  const isVoiceMode = useCallStore((s) => s.isVoiceMode)
+  const setLivekitConnection = useCallStore((s) => s.setLivekitConnection)
   const addTranscriptMessage = useCallStore((s) => s.addTranscriptMessage)
   const removeTranscriptMessage = useCallStore((s) => s.removeTranscriptMessage)
   const updateResponse = useCallStore((s) => s.updateResponse)
@@ -28,6 +31,14 @@ export function useCallActions(callId: string, patientId: string) {
   const logApi = useCallStore((s) => s.logApi)
 
   function handleStartCall() {
+    if (isVoiceMode) {
+      handleStartVoiceCall()
+    } else {
+      handleStartTextCall()
+    }
+  }
+
+  function handleStartTextCall() {
     setCallStatus("connecting")
     const start = Date.now()
     startCall.mutate(
@@ -50,6 +61,27 @@ export function useCallActions(callId: string, patientId: string) {
         onError: (err) => {
           logApi("POST", "/api/call/start", 500, { error: String(err) }, Date.now() - start)
           toast.error("Failed to connect call")
+          setCallStatus("idle")
+        },
+      },
+    )
+  }
+
+  function handleStartVoiceCall() {
+    setCallStatus("connecting")
+    const start = Date.now()
+    startVoiceCall.mutate(
+      { patient_id: patientId, call_id: callId, config },
+      {
+        onSuccess: (data) => {
+          logApi("POST", "/api/call/start-voice", 200, data, Date.now() - start)
+          setLivekitConnection(data.livekit_url, data.livekit_token)
+          toast.success("Voice call connecting...")
+          setCallStatus("in-progress")
+        },
+        onError: (err) => {
+          logApi("POST", "/api/call/start-voice", 500, { error: String(err) }, Date.now() - start)
+          toast.error("Failed to start voice call")
           setCallStatus("idle")
         },
       },

@@ -102,3 +102,40 @@ class EndCallOut(BaseModel):
     responses: list[QuestionResponseOut]
     completeness: float
     transcript: list[TranscriptMessageOut]
+
+
+# --- Voice Call (Phase 5) ---
+
+class StartVoiceCallIn(BaseModel):
+    patient_id: str
+    call_id: str | None = None
+    config: CallConfigIn = CallConfigIn()
+
+
+class StartVoiceCallOut(BaseModel):
+    call_id: str
+    livekit_url: str
+    livekit_token: str
+    status: str
+
+
+class VoiceCapturedResponse(BaseModel):
+    question_index: int
+    raw_answer: str
+    normalized_answer: str
+    confidence: float = 1.0
+
+
+class VoiceEventIn(BaseModel):
+    """Webhook payload POSTed by the voice agent when the call ends."""
+    event: Literal["call_completed"]
+    call_id: str
+    outcome: str
+    completeness: float
+    responses: list[VoiceCapturedResponse]
+    transcript: list[TranscriptMessageOut]
+
+
+class VoiceEventOut(BaseModel):
+    status: str
+    call_id: str

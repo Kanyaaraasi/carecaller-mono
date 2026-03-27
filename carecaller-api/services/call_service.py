@@ -16,6 +16,7 @@ from config import get_settings
 from db.entities import Call, CallResponse, HealthSnapshot
 from repositories import call_repo, patient_repo
 from services.context_builder import build_patient_context
+from services.livekit_service import create_voice_room, generate_participant_token
 
 from carecaller_agents.handlers.call_state import CallState
 from carecaller_agents.models.call import CallConfig, CallOutcome, CallPhase
@@ -266,6 +267,144 @@ async def get_call_state(
         duration = (datetime.now() - started).total_seconds()
 
     return call, responses, transcript, duration
+
+
+async def start_voice_call(
+    session: AsyncSession,
+    call_id: str,
+    patient_id: str,
+    tone: str = "friendly",
+    speed: float = 1.0,
+) -> tuple[str, str, str]:
+    """Start a voice call via LiveKit. Returns (call_id, livekit_url, livekit_token).
+
+    1. Create call + 14 empty responses in DB (same as text call)
+    2. Create LiveKit room with DB-enriched patient metadata
+    3. Generate participant token for the frontend
+    """
+    patient = await patient_repo.get_by_id(session, patient_id)
+    if patient is None:
+        raise ValueError(f"Patient {patient_id} not found")
+
+    await call_repo.create_call(
+        session, call_id, patient_id, config_tone=tone, config_speed=speed,
+    )
+    await session.commit()
+
+    # Create LiveKit room with enriched metadata
+    room_name = await create_voice_room(session, call_id, patient_id)
+
+    # Generate token for the frontend participant
+    settings = get_settings()
+    token = generate_participant_token(
+        room_name=room_name,
+        identity=f"user-{call_id}",
+        name=patient.name,
+    )
+
+    logger.info("Started voice call %s for patient %s (room: %s)", call_id, patient.name, room_name)
+    return call_id, settings.livekit_url, token
+
+
+async def persist_voice_results(
+    session: AsyncSession,
+    call_id: str,
+    outcome: str,
+    completeness: float,
+    responses: list[dict],
+    transcript: list[dict],
+) -> None:
+    """Persist voice call results POSTed by the agent worker.
+
+    Called from the /api/call/:id/voice-event webhook. The agent drives the
+    call FSM independently — this just writes the final state to DB.
+    """
+    call = await call_repo.get_call(session, call_id)
+    if call is None:
+        raise ValueError(f"Call {call_id} not found")
+
+    # Persist each captured response
+    for r in responses:
+        await call_repo.update_response(
+            session,
+            call_id,
+            question_index=r["question_index"],
+            raw_answer=r["raw_answer"],
+            normalized_answer=r["normalized_answer"],
+            status="answered",
+            confidence=r.get("confidence", 1.0),
+        )
+
+    # Persist transcript
+    for t in transcript:
+        await call_repo.add_transcript_turn(
+            session, call_id, role=t["role"], message=t["text"], timestamp=t["timestamp"],
+        )
+
+    # End the call
+    await call_repo.end_call(session, call_id, outcome, completeness)
+
+    # Create health snapshot if completed
+    if outcome == "completed":
+        await _create_voice_snapshot(session, call_id, call.patient_id, responses)
+
+    await session.commit()
+    logger.info("Persisted voice results for call %s (outcome=%s)", call_id, outcome)
+
+
+async def _create_voice_snapshot(
+    session: AsyncSession,
+    call_id: str,
+    patient_id: str,
+    responses: list[dict],
+) -> None:
+    """Create a HealthSnapshot from voice call captured responses."""
+    snapshot = HealthSnapshot(patient_id=patient_id, source_call_id=call_id)
+
+    for r in responses:
+        answer = r.get("normalized_answer") or r.get("raw_answer", "")
+        if not answer:
+            continue
+        q_idx = r["question_index"]
+        match q_idx:
+            case 1:
+                try:
+                    snapshot.weight_lbs = float("".join(c for c in answer if c.isdigit() or c == "."))
+                except ValueError:
+                    pass
+            case 2:
+                snapshot.height = answer
+            case 3:
+                try:
+                    snapshot.weight_lost_lbs = float("".join(c for c in answer if c.isdigit() or c == "."))
+                except ValueError:
+                    pass
+            case 4:
+                snapshot.side_effects = answer
+            case 5:
+                snapshot.satisfaction = answer
+            case 6:
+                try:
+                    snapshot.goal_weight_lbs = float("".join(c for c in answer if c.isdigit() or c == "."))
+                except ValueError:
+                    pass
+            case 7:
+                snapshot.dosage_requests = answer
+            case 8:
+                snapshot.new_medications = answer
+            case 9:
+                snapshot.new_conditions = answer
+            case 10:
+                snapshot.allergies = answer
+            case 11:
+                snapshot.surgeries = answer
+            case 12:
+                snapshot.doctor_questions = answer
+            case 13:
+                snapshot.address_changed = answer
+
+    session.add(snapshot)
+    logger.info("Created health snapshot for patient %s from voice call %s", patient_id, call_id)
 
 
 async def _create_snapshot_from_call(

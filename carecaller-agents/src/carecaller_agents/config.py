@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     groq_model: str = "gpt-oss-20b"
     groq_base_url: str = "https://api.groq.com/openai/v1"
 
+    # --- API Callback (Phase 5) ---
+    api_base_url: str = "http://localhost:8004"
+
     # --- Agent ---
     agent_name: str = "Jessica"
     llm_temperature: float = 0.7

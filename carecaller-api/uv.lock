@@ -177,6 +177,7 @@ name = "carecaller-agents"
 version = "0.1.0"
 source = { editable = "../carecaller-agents" }
 dependencies = [
+    { name = "httpx" },
     { name = "livekit" },
     { name = "livekit-agents", extra = ["codecs"] },
     { name = "livekit-plugins-deepgram" },
@@ -189,6 +190,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
     { name = "livekit", specifier = ">=1.0" },
     { name = "livekit-agents", extras = ["codecs"], specifier = ">=1.0" },
     { name = "livekit-plugins-deepgram", specifier = ">=1.0" },
@@ -211,6 +213,7 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "carecaller-agents" },
     { name = "fastapi" },
+    { name = "livekit-api" },
     { name = "openai" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -232,6 +235,7 @@ requires-dist = [
     { name = "carecaller-agents", editable = "../carecaller-agents" },
     { name = "fastapi", specifier = ">=0.135.2" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
+    { name = "livekit-api", specifier = ">=0.7" },
     { name = "openai", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },

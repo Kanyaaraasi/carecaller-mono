@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
+import httpx
 from livekit import rtc
 from livekit.agents import (
     Agent,
@@ -45,8 +47,14 @@ from carecaller_agents.prompts.system_prompt import build_system_prompt
 logger = logging.getLogger("carecaller-agents")
 
 
-def _parse_patient_from_metadata(metadata: str) -> PatientContext:
-    """Extract patient context from LiveKit room metadata JSON."""
+def _parse_room_metadata(metadata: str) -> tuple[PatientContext, dict]:
+    """Extract patient context and extra fields from LiveKit room metadata JSON.
+
+    Returns (patient_context, extras) where extras may contain:
+        - call_id: str
+        - health_context: str (DB-enriched patient history)
+        - api_base_url: str
+    """
     if not metadata:
         raise ValueError(
             "Room metadata is empty — carecaller-api must set patient context "
@@ -56,7 +64,13 @@ def _parse_patient_from_metadata(metadata: str) -> PatientContext:
         data = json.loads(metadata)
     except json.JSONDecodeError as e:
         raise ValueError(f"Room metadata is not valid JSON: {e}") from e
-    return PatientContext(**data)
+
+    extras = {
+        "call_id": data.pop("call_id", None),
+        "health_context": data.pop("health_context", None),
+        "api_base_url": data.pop("api_base_url", None),
+    }
+    return PatientContext(**data), extras
 
 
 class CareCallerAgent(Agent):
@@ -73,16 +87,23 @@ class CareCallerAgent(Agent):
         call_state: CallState,
         settings: Settings,
         room: rtc.Room | None = None,
+        call_id: str | None = None,
+        health_context: str | None = None,
+        api_base_url: str | None = None,
     ) -> None:
         self._patient = patient
         self._call_state = call_state
         self._settings = settings
         self._room = room
+        self._call_id = call_id
+        self._health_context = health_context
+        self._api_base_url = api_base_url or settings.api_base_url
+        self._call_start_time = time.monotonic()
         self._response_handler = DefaultResponseCapture()
         self._escalation_handler = DefaultEscalationHandler()
         self._edge_case_handler = DefaultEdgeCaseHandler()
 
-        # Build initial system prompt
+        # Build initial system prompt, inject DB health context if available
         self._call_state.phase = CallPhase.GREETING
         initial_prompt = build_system_prompt(
             phase=self._call_state.phase,
@@ -91,6 +112,8 @@ class CareCallerAgent(Agent):
             responses=self._call_state.responses,
             current_question_index=self._call_state.current_question_index,
         )
+        if self._health_context:
+            initial_prompt = f"{initial_prompt}\n\n{self._health_context}"
 
         super().__init__(instructions=initial_prompt)
 
@@ -136,6 +159,7 @@ class CareCallerAgent(Agent):
             self._call_state.set_outcome(outcome)
             logger.info("Edge case detected: %s", edge_result.case_type)
             await self._publish_event("call_status", {"status": outcome.value})
+            await self._post_results_to_api(outcome.value)
             return
 
         # --- Step 2: Response capture (only during questionnaire) ---
@@ -176,6 +200,7 @@ class CareCallerAgent(Agent):
                     "call_status",
                     {"status": "escalated", "reason": esc_result.reason},
                 )
+                await self._post_results_to_api("escalated")
                 return
             else:
                 self._call_state.flag_pending_escalation()
@@ -195,6 +220,8 @@ class CareCallerAgent(Agent):
                 responses=self._call_state.responses,
                 current_question_index=self._call_state.current_question_index,
             )
+            if self._health_context:
+                new_prompt = f"{new_prompt}\n\n{self._health_context}"
             await self.update_instructions(new_prompt)
 
         if self._call_state.phase == CallPhase.COMPLETED:
@@ -206,6 +233,7 @@ class CareCallerAgent(Agent):
                     "answered_count": self._call_state.answered_count,
                 },
             )
+            await self._post_results_to_api("completed")
 
     async def _publish_event(self, event_type: str, data: dict) -> None:
         """Publish a JSON event to all room participants via LiveKit Data Channels."""
@@ -214,6 +242,57 @@ class CareCallerAgent(Agent):
             await self._room.local_participant.publish_data(
                 payload=payload, topic="call_events"
             )
+
+    async def _post_results_to_api(self, outcome: str) -> None:
+        """POST final call results to the API so they're persisted to DB.
+
+        Called when the call reaches a terminal state (completed, escalated,
+        opted_out, wrong_number, etc.).
+        """
+        if not self._call_id:
+            logger.warning("No call_id — skipping API callback")
+            return
+
+        elapsed = time.monotonic() - self._call_start_time
+
+        # Build responses payload from FSM
+        responses = []
+        for r in self._call_state.responses:
+            if r.raw_answer or r.normalized_answer:
+                responses.append({
+                    "question_index": r.question_index,
+                    "raw_answer": r.raw_answer or "",
+                    "normalized_answer": r.normalized_answer or "",
+                    "confidence": r.confidence,
+                })
+
+        # Build transcript payload from FSM
+        transcript = []
+        for t in self._call_state.transcript:
+            transcript.append({
+                "id": f"voice-{len(transcript)}",
+                "role": t.role,
+                "text": t.message,
+                "timestamp": t.timestamp,
+            })
+
+        payload = {
+            "event": "call_completed",
+            "call_id": self._call_id,
+            "outcome": outcome,
+            "completeness": self._call_state.completeness,
+            "responses": responses,
+            "transcript": transcript,
+        }
+
+        url = f"{self._api_base_url}/api/call/{self._call_id}/voice-event"
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, json=payload)
+                resp.raise_for_status()
+            logger.info("Posted voice results to API for call %s (status=%d)", self._call_id, resp.status_code)
+        except Exception:
+            logger.exception("Failed to POST voice results to API for call %s", self._call_id)
 
 
 async def entrypoint(ctx: JobContext) -> None:
@@ -224,20 +303,23 @@ async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
     logger.info("Agent connected to room: %s", ctx.room.name)
 
-    # Load patient context from room metadata
-    patient = _parse_patient_from_metadata(ctx.room.metadata or "")
-    logger.info("Loaded patient context: %s", patient.name)
+    # Load patient context + enriched metadata from room
+    patient, extras = _parse_room_metadata(ctx.room.metadata or "")
+    logger.info("Loaded patient context: %s (call_id=%s)", patient.name, extras.get("call_id"))
 
     # Initialize call state
     call_config = CallConfig(agent_name=settings.agent_name)
     call_state = CallState(patient=patient, config=call_config)
 
-    # Create the agent
+    # Create the agent with DB-enriched context
     agent = CareCallerAgent(
         patient=patient,
         call_state=call_state,
         settings=settings,
         room=ctx.room,
+        call_id=extras.get("call_id"),
+        health_context=extras.get("health_context"),
+        api_base_url=extras.get("api_base_url"),
     )
 
     # Create session with pipeline components

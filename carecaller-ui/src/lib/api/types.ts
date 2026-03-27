@@ -126,6 +126,21 @@ export interface GetQuestionsResponse {
   questions: Question[]
 }
 
+// ── Voice Call (Phase 5) ──
+
+export interface StartVoiceCallRequest {
+  patient_id: string
+  call_id?: string
+  config: CallConfig
+}
+
+export interface StartVoiceCallResponse {
+  call_id: string
+  livekit_url: string
+  livekit_token: string
+  status: CallStatus
+}
+
 // ── API Log (dev inspector) ──
 
 export interface ApiLogEntry {

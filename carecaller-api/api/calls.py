@@ -17,7 +17,11 @@ from schemas import (
     SendMessageOut,
     StartCallIn,
     StartCallOut,
+    StartVoiceCallIn,
+    StartVoiceCallOut,
     TranscriptMessageOut,
+    VoiceEventIn,
+    VoiceEventOut,
 )
 from services import call_service
 
@@ -101,6 +105,52 @@ async def get_responses(call_id: str, session: AsyncSession = Depends(get_sessio
         outcome=call.outcome,
         duration_seconds=duration,
     )
+
+
+@router.post("/start-voice", response_model=StartVoiceCallOut)
+async def start_voice_call(req: StartVoiceCallIn, session: AsyncSession = Depends(get_session)):
+    """Start a voice call: create DB records + LiveKit room, return token for frontend."""
+    call_id = req.call_id or f"call_{uuid.uuid4().hex[:12]}"
+    try:
+        call_id, livekit_url, livekit_token = await call_service.start_voice_call(
+            session,
+            call_id=call_id,
+            patient_id=req.patient_id,
+            tone=req.config.tone,
+            speed=req.config.speed,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return StartVoiceCallOut(
+        call_id=call_id,
+        livekit_url=livekit_url,
+        livekit_token=livekit_token,
+        status="connecting",
+    )
+
+
+@router.post("/{call_id}/voice-event", response_model=VoiceEventOut)
+async def voice_event(
+    call_id: str, req: VoiceEventIn, session: AsyncSession = Depends(get_session)
+):
+    """Webhook called by the voice agent when the call ends. Persists results to DB."""
+    if req.call_id != call_id:
+        raise HTTPException(status_code=400, detail="call_id mismatch")
+
+    try:
+        await call_service.persist_voice_results(
+            session,
+            call_id=call_id,
+            outcome=req.outcome,
+            completeness=req.completeness,
+            responses=[r.model_dump() for r in req.responses],
+            transcript=[t.model_dump() for t in req.transcript],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return VoiceEventOut(status="persisted", call_id=call_id)
 
 
 @router.post("/{call_id}/end", response_model=EndCallOut)

@@ -20,6 +20,7 @@ import { Inspector } from "@/components/call/Inspector"
 import { Transcript } from "@/components/call/Transcript"
 import { PhoneControls } from "@/components/call/PhoneControls"
 import { VoiceVisualizer } from "@/components/call/VoiceVisualizer"
+import { VoiceRoom } from "@/components/call/VoiceRoom"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 
@@ -48,6 +49,7 @@ export function ActiveCall() {
   const elapsed = useCallStore((s) => s.elapsed)
   const responses = useCallStore((s) => s.responses)
   const isMuted = useCallStore((s) => s.isMuted)
+  const isVoiceMode = useCallStore((s) => s.isVoiceMode)
   const initCall = useCallStore((s) => s.initCall)
   const setResponses = useCallStore((s) => s.setResponses)
   const incrementElapsed = useCallStore((s) => s.incrementElapsed)
@@ -185,6 +187,9 @@ export function ActiveCall() {
           </div>
         </div>
       </div>
+
+      {/* LiveKit voice connection (invisible — just manages audio) */}
+      {isVoiceMode && <VoiceRoom />}
 
       {/* Main content */}
       <ResizablePanelGroup direction="horizontal" className="flex-1">

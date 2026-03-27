@@ -12,6 +12,7 @@ from api import calls, patients, questions
 from config import get_settings
 from db.connection import close_db, get_session, init_db
 from db.seed import seed_db
+from services.livekit_service import close as close_livekit
 
 load_dotenv()
 
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("API ready")
     yield
+    await close_livekit()
     await close_db()
 
 

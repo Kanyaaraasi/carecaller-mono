@@ -15,6 +15,11 @@ interface CallStore {
   elapsed: number
   isMuted: boolean
 
+  // Voice mode (Phase 5)
+  isVoiceMode: boolean
+  livekitUrl: string | null
+  livekitToken: string | null
+
   // Data
   transcript: TranscriptMessage[]
   responses: QuestionResponse[]
@@ -29,6 +34,8 @@ interface CallStore {
   incrementElapsed: () => void
   toggleMute: () => void
   resetCall: () => void
+  setVoiceMode: (enabled: boolean) => void
+  setLivekitConnection: (url: string, token: string) => void
 
   // Actions — transcript
   addTranscriptMessage: (msg: TranscriptMessage) => void
@@ -69,6 +76,9 @@ export const useCallStore = create<CallStore>((set) => ({
   callStatus: "idle",
   elapsed: 0,
   isMuted: false,
+  isVoiceMode: false,
+  livekitUrl: null,
+  livekitToken: null,
   transcript: [],
   responses: [],
   apiLog: [],
@@ -81,6 +91,9 @@ export const useCallStore = create<CallStore>((set) => ({
       callStatus: "idle",
       elapsed: 0,
       isMuted: false,
+      isVoiceMode: false,
+      livekitUrl: null,
+      livekitToken: null,
       transcript: [],
       responses: [],
       apiLog: [],
@@ -92,6 +105,10 @@ export const useCallStore = create<CallStore>((set) => ({
 
   toggleMute: () => set((s) => ({ isMuted: !s.isMuted })),
 
+  setVoiceMode: (enabled) => set({ isVoiceMode: enabled }),
+
+  setLivekitConnection: (url, token) => set({ livekitUrl: url, livekitToken: token }),
+
   resetCall: () =>
     set({
       callId: null,
@@ -99,6 +116,9 @@ export const useCallStore = create<CallStore>((set) => ({
       callStatus: "idle",
       elapsed: 0,
       isMuted: false,
+      isVoiceMode: false,
+      livekitUrl: null,
+      livekitToken: null,
       transcript: [],
       responses: [],
       apiLog: [],
