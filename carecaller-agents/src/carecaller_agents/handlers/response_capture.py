@@ -50,11 +50,32 @@ class ResponseCaptureHandler(Protocol):
         ...
 
 
-class DefaultResponseCapture:
-    """Passthrough implementation — captures the raw utterance without normalization.
+import re
 
-    Use this as a fallback until the response agent team provides their implementation.
-    Passes the verbatim STT transcript as both raw and normalized answer.
+
+# Patterns that indicate the user is NOT answering the question
+_NON_ANSWER_PATTERNS = re.compile(
+    r"^("
+    r"(what|huh|sorry|excuse me|pardon|come again|say that again)"
+    r"|what do you mean"
+    r"|can you (repeat|explain|clarify|say)"
+    r"|i don'?t (understand|know what|get)"
+    r"|repeat that"
+    r"|what was (that|the question)"
+    r"|i'?m sorry\??"
+    r")[\s?.!]*$",
+    re.IGNORECASE,
+)
+
+# Very short utterances that are likely not substantive answers
+_MIN_ANSWER_LENGTH = 3  # characters, excluding whitespace
+
+
+class DefaultResponseCapture:
+    """Response capture with non-answer detection.
+
+    Detects clarification requests, questions, and non-answers so the agent
+    can re-ask instead of blindly advancing to the next question.
     """
 
     async def extract_response(
@@ -63,10 +84,29 @@ class DefaultResponseCapture:
         patient_utterance: str,
         conversation_context: list[TranscriptTurn],
     ) -> CapturedResponse:
+        text = patient_utterance.strip()
+        needs_clarification = False
+        confidence = 0.5
+
+        # Check for non-answer patterns
+        if _NON_ANSWER_PATTERNS.match(text):
+            needs_clarification = True
+            confidence = 0.1
+
+        # Very short non-word utterances
+        elif len(text) < _MIN_ANSWER_LENGTH:
+            needs_clarification = True
+            confidence = 0.1
+
+        # Utterance is a question (ends with ?) and short — likely asking for clarification
+        elif text.endswith("?") and len(text.split()) < 8:
+            needs_clarification = True
+            confidence = 0.2
+
         return CapturedResponse(
             question_index=question.index,
             raw_answer=patient_utterance,
             normalized_answer=patient_utterance,
-            confidence=0.5,
-            needs_clarification=False,
+            confidence=confidence,
+            needs_clarification=needs_clarification,
         )

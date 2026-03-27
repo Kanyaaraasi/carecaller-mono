@@ -7,6 +7,7 @@ import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { useStartCall, useStartVoiceCall, useSendMessage, useEndCall } from "@/lib/api/hooks"
+import { apiClient } from "@/lib/api/client"
 import { useCallStore } from "@/stores/call-store"
 
 export function useCallActions(callId: string, patientId: string) {
@@ -88,7 +89,40 @@ export function useCallActions(callId: string, patientId: string) {
     )
   }
 
-  function handleEndCall() {
+  async function handleEndCall() {
+    // For voice calls: persist in-memory transcript + responses to DB first
+    if (isVoiceMode) {
+      const transcript = useCallStore.getState().transcript
+      const responses = useCallStore.getState().responses
+      const answeredResponses = responses
+        .filter((r) => r.status === "answered" && r.answer)
+        .map((r) => ({
+          question_index: r.question_index,
+          raw_answer: r.answer ?? "",
+          normalized_answer: r.answer ?? "",
+          confidence: 1.0,
+        }))
+      const transcriptPayload = transcript.map((t) => ({
+        id: t.id,
+        role: t.role,
+        text: t.text,
+        timestamp: t.timestamp,
+      }))
+      const answeredCount = answeredResponses.length
+      try {
+        await apiClient.post(`/api/call/${callId}/voice-event`, {
+          event: "call_completed",
+          call_id: callId,
+          outcome: "completed",
+          completeness: responses.length > 0 ? answeredCount / responses.length : 0,
+          responses: answeredResponses,
+          transcript: transcriptPayload,
+        })
+      } catch {
+        // Best effort — agent may have already persisted
+      }
+    }
+
     const start = Date.now()
     endCall.mutate(
       { call_id: callId, reason: "completed" },

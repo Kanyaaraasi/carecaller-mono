@@ -102,6 +102,7 @@ class CareCallerAgent(Agent):
         self._response_handler = DefaultResponseCapture()
         self._escalation_handler = DefaultEscalationHandler()
         self._edge_case_handler = DefaultEdgeCaseHandler()
+        self._pending_agent_text: str | None = None  # buffered for next turn
 
         # Build initial system prompt, inject DB health context if available
         self._call_state.phase = CallPhase.GREETING
@@ -124,6 +125,7 @@ class CareCallerAgent(Agent):
             f"Am I speaking with {self._patient.name}?"
         )
         self._call_state.add_transcript_turn("agent", greeting)
+        await self._publish_transcript("agent", greeting)
         self.session.say(greeting)
         logger.info("[AGENT]: %s", greeting)
 
@@ -134,18 +136,28 @@ class CareCallerAgent(Agent):
     ) -> None:
         """Called after VAD + STT finalize a user utterance and the LLM responds.
 
-        This is where we run the handler chain:
-            1. Edge case detection
-            2. Response capture
-            3. Escalation check
-            4. Advance state + rebuild prompt
+        Handler chain:
+            1. Publish user transcript
+            2. Edge case detection
+            3. Response capture (with non-answer detection)
+            4. Escalation check
+            5. Advance state only if user gave a real answer
+            6. Publish agent transcript
         """
         user_text = new_message.text_content if hasattr(new_message, "text_content") else str(new_message)
         if not user_text:
             return
 
+        # Publish buffered agent reply from PREVIOUS turn (so transcript order is agent → user)
+        if self._pending_agent_text:
+            self._call_state.add_transcript_turn("agent", self._pending_agent_text)
+            await self._publish_transcript("agent", self._pending_agent_text)
+            logger.info("[AGENT]: %s", self._pending_agent_text)
+            self._pending_agent_text = None
+
         logger.info("[USER]: %s", user_text)
         self._call_state.add_transcript_turn("user", user_text)
+        await self._publish_transcript("user", user_text)
 
         if self._call_state.is_terminal:
             return
@@ -163,6 +175,7 @@ class CareCallerAgent(Agent):
             return
 
         # --- Step 2: Response capture (only during questionnaire) ---
+        did_capture = False
         if self._call_state.phase == CallPhase.QUESTIONNAIRE:
             questions = Question.all_questions()
             current_q = questions[self._call_state.current_question_index]
@@ -172,20 +185,26 @@ class CareCallerAgent(Agent):
                 patient_utterance=user_text,
                 conversation_context=self._call_state.transcript,
             )
-            self._call_state.record_answer(
-                question_index=captured.question_index,
-                raw_answer=captured.raw_answer,
-                normalized_answer=captured.normalized_answer,
-                confidence=captured.confidence,
-            )
-            await self._publish_event(
-                "response_captured",
-                {
-                    "question_index": captured.question_index,
-                    "question": current_q.text,
-                    "answer": captured.normalized_answer,
-                },
-            )
+
+            if not captured.needs_clarification:
+                # Real answer — record it and publish
+                self._call_state.record_answer(
+                    question_index=captured.question_index,
+                    raw_answer=captured.raw_answer,
+                    normalized_answer=captured.normalized_answer,
+                    confidence=captured.confidence,
+                )
+                await self._publish_event(
+                    "response_captured",
+                    {
+                        "question_index": captured.question_index,
+                        "question": current_q.text,
+                        "answer": captured.normalized_answer,
+                    },
+                )
+                did_capture = True
+            else:
+                logger.info("Non-answer detected, staying on Q%d for clarification", current_q.index + 1)
 
         # --- Step 3: Escalation check ---
         esc_result = await self._escalation_handler.should_escalate(
@@ -205,9 +224,10 @@ class CareCallerAgent(Agent):
             else:
                 self._call_state.flag_pending_escalation()
 
-        # --- Step 4: Advance state ---
+        # --- Step 4: Advance state (only if we captured a real answer or not in questionnaire) ---
         if self._call_state.phase == CallPhase.QUESTIONNAIRE:
-            self._call_state.advance_phase()
+            if did_capture:
+                self._call_state.advance_phase()
         elif not self._call_state.phase.is_terminal:
             self._call_state.advance_phase()
 
@@ -225,6 +245,21 @@ class CareCallerAgent(Agent):
             await self.update_instructions(new_prompt)
 
         if self._call_state.phase == CallPhase.COMPLETED:
+            # Flush any pending agent text (the goodbye message) before ending
+            if self._pending_agent_text:
+                self._call_state.add_transcript_turn("agent", self._pending_agent_text)
+                await self._publish_transcript("agent", self._pending_agent_text)
+                logger.info("[AGENT]: %s", self._pending_agent_text)
+                self._pending_agent_text = None
+
+            # Give TTS time to finish speaking the goodbye
+            import asyncio
+            await asyncio.sleep(5)
+
+            # Persist results to DB FIRST so summary page has data
+            await self._post_results_to_api("completed")
+
+            # THEN tell the UI the call is done
             await self._publish_event(
                 "call_status",
                 {
@@ -233,7 +268,14 @@ class CareCallerAgent(Agent):
                     "answered_count": self._call_state.answered_count,
                 },
             )
-            await self._post_results_to_api("completed")
+
+        # --- Step 6: Buffer agent response for next turn ---
+        # turn_ctx contains the LLM's response to THIS turn. We buffer it
+        # and publish at the START of the next on_user_turn_completed so the
+        # transcript order stays correct (agent → user → agent → user).
+        agent_text = self._get_last_agent_reply(turn_ctx)
+        if agent_text:
+            self._pending_agent_text = agent_text
 
     async def _publish_event(self, event_type: str, data: dict) -> None:
         """Publish a JSON event to all room participants via LiveKit Data Channels."""
@@ -242,6 +284,23 @@ class CareCallerAgent(Agent):
             await self._room.local_participant.publish_data(
                 payload=payload, topic="call_events"
             )
+
+    async def _publish_transcript(self, role: str, text: str) -> None:
+        """Publish a transcript_turn event so the UI can render the real conversation."""
+        elapsed = time.monotonic() - self._call_start_time
+        await self._publish_event("transcript_turn", {
+            "role": role,
+            "text": text,
+            "timestamp": elapsed,
+        })
+
+    @staticmethod
+    def _get_last_agent_reply(turn_ctx: llm.ChatContext) -> str | None:
+        """Extract the last assistant message from the chat context."""
+        for msg in reversed(turn_ctx.messages()):
+            if msg.role == "assistant" and msg.text_content:
+                return msg.text_content
+        return None
 
     async def _post_results_to_api(self, outcome: str) -> None:
         """POST final call results to the API so they're persisted to DB.

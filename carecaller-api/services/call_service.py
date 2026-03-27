@@ -323,6 +323,12 @@ async def persist_voice_results(
     if call is None:
         raise ValueError(f"Call {call_id} not found")
 
+    # Skip if already persisted (idempotent — UI and agent may both call this)
+    existing_transcript = await call_repo.get_transcript(session, call_id)
+    if len(existing_transcript) > 0:
+        logger.info("Voice results already persisted for call %s — skipping", call_id)
+        return
+
     # Persist each captured response
     for r in responses:
         await call_repo.update_response(

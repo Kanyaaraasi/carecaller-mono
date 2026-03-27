@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useCallback } from "react"
+import { useNavigate } from "@tanstack/react-router"
 import {
   Room,
   RoomEvent,
@@ -19,11 +20,14 @@ import {
   RemoteParticipant,
   DataPacket_Kind,
 } from "livekit-client"
+import { toast } from "sonner"
 import { useCallStore } from "@/stores/call-store"
 
 export function VoiceRoom() {
+  const navigate = useNavigate()
   const livekitUrl = useCallStore((s) => s.livekitUrl)
   const livekitToken = useCallStore((s) => s.livekitToken)
+  const callId = useCallStore((s) => s.callId)
   const callStatus = useCallStore((s) => s.callStatus)
   const isMuted = useCallStore((s) => s.isMuted)
   const setCallStatus = useCallStore((s) => s.setCallStatus)
@@ -40,18 +44,16 @@ export function VoiceRoom() {
         const text = new TextDecoder().decode(payload)
         const data = JSON.parse(text)
 
-        if (data.event === "response_captured") {
+        if (data.event === "transcript_turn") {
           addTranscriptMessage({
             id: crypto.randomUUID(),
-            role: "agent",
-            text: `[Captured Q${data.question_index + 1}: ${data.answer}]`,
-            timestamp: Date.now() / 1000,
-            capturedAnswer: {
-              questionIndex: data.question_index,
-              question: data.question,
-              answer: data.answer,
-            },
+            role: data.role,
+            text: data.text,
+            timestamp: data.timestamp ?? Date.now() / 1000,
           })
+        }
+
+        if (data.event === "response_captured") {
           updateResponse({
             question_index: data.question_index,
             question: data.question,
@@ -64,6 +66,11 @@ export function VoiceRoom() {
         if (data.event === "call_status") {
           if (data.status === "completed" || data.status === "escalated") {
             setCallStatus(data.status === "escalated" ? "escalated" : "completed")
+            toast.info("Call ended")
+            // Data is already persisted to DB (agent POSTs before sending this event)
+            if (callId) {
+              navigate({ to: "/call/$callId/summary", params: { callId } })
+            }
           }
           logApi("WS", "data_channel/call_status", 200, data, 0)
         }
@@ -71,7 +78,7 @@ export function VoiceRoom() {
         // ignore non-JSON data
       }
     },
-    [addTranscriptMessage, updateResponse, setCallStatus, logApi],
+    [addTranscriptMessage, updateResponse, setCallStatus, logApi, callId, navigate],
   )
 
   // Connect to room

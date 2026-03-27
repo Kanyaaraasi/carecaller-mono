@@ -7,7 +7,7 @@ import {
   RiCircleLine,
   RiSkipForwardLine,
 } from "@remixicon/react"
-import { ConfigTab } from "./ConfigTab"
+// import { ConfigTab } from "./ConfigTab"
 import { ApiLogTab } from "./ApiLogTab"
 import { useCallStore } from "@/stores/call-store"
 import type { QuestionResponse } from "@/lib/api/types"
@@ -22,16 +22,12 @@ const statusIcon: Record<QuestionResponse["status"], React.ReactNode> = {
 export function Inspector() {
   const responses = useCallStore((s) => s.responses)
   const callStatus = useCallStore((s) => s.callStatus)
-  const config = useCallStore((s) => s.config)
-  const setConfig = useCallStore((s) => s.setConfig)
   const apiLog = useCallStore((s) => s.apiLog)
   const clearApiLog = useCallStore((s) => s.clearApiLog)
 
   const answeredCount = responses.filter((r) => r.status === "answered").length
   const completeness =
     responses.length > 0 ? (answeredCount / responses.length) * 100 : 0
-  const isCallActive =
-    callStatus === "in-progress" || callStatus === "connecting"
 
   return (
     <div className="flex h-full flex-col border-l bg-card">
@@ -39,7 +35,9 @@ export function Inspector() {
         <div className="border-b px-4 pt-3">
           <TabsList variant="line">
             <TabsTrigger value="responses">Responses</TabsTrigger>
+            {/* Config tab commented out — static UI with no functionality for now
             <TabsTrigger value="config">Config</TabsTrigger>
+            */}
             <TabsTrigger value="api">
               API Log
               {apiLog.length > 0 && (
@@ -78,9 +76,6 @@ export function Inspector() {
                         </span>
                         {r.question}
                       </p>
-                      {r.answer && (
-                        <p className="mt-0.5 text-foreground">{r.answer}</p>
-                      )}
                     </div>
                   </div>
                 ))
@@ -98,6 +93,7 @@ export function Inspector() {
           </div>
         </TabsContent>
 
+        {/* Config tab commented out — can be re-enabled when controls are wired up
         <TabsContent value="config" className="flex-1 overflow-hidden">
           <ConfigTab
             config={config}
@@ -105,6 +101,7 @@ export function Inspector() {
             disabled={isCallActive}
           />
         </TabsContent>
+        */}
 
         <TabsContent value="api" className="flex-1 overflow-hidden">
           <ApiLogTab entries={apiLog} onClear={clearApiLog} />

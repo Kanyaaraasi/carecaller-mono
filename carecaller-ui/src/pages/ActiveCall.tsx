@@ -66,7 +66,7 @@ export function ActiveCall() {
   // API hooks
   const { data: patient, isLoading: patientLoading, isError: patientError } = usePatient(patientId ?? "")
   const { data: questions } = useQuestions()
-  const { data: callResponsesData } = useCallResponses(callId, callStatus === "in-progress")
+  const { data: callResponsesData } = useCallResponses(callId, callStatus === "in-progress" && !isVoiceMode)
 
   // Init store when route mounts
   useEffect(() => {
