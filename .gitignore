@@ -26,6 +26,11 @@ __pycache__/
 *.pyc
 *.pyo
 
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+
 # Logs
 *.log
 
