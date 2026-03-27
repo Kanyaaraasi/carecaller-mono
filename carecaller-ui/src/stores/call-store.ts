@@ -32,6 +32,7 @@ interface CallStore {
 
   // Actions — transcript
   addTranscriptMessage: (msg: TranscriptMessage) => void
+  removeTranscriptMessage: (msgId: string) => void
   attachCapturedAnswer: (
     msgId: string,
     captured: { questionIndex: number; question: string; answer: string },
@@ -106,6 +107,9 @@ export const useCallStore = create<CallStore>((set) => ({
 
   addTranscriptMessage: (msg) =>
     set((s) => ({ transcript: [...s.transcript, msg] })),
+
+  removeTranscriptMessage: (msgId) =>
+    set((s) => ({ transcript: s.transcript.filter((m) => m.id !== msgId) })),
 
   attachCapturedAnswer: (msgId, captured) =>
     set((s) => ({

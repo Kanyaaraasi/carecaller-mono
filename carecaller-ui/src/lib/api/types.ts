@@ -76,6 +76,7 @@ export interface CallConfig {
 
 export interface StartCallRequest {
   patient_id: string
+  call_id?: string
   config: CallConfig
 }
 
@@ -123,4 +124,16 @@ export interface EndCallResponse {
 
 export interface GetQuestionsResponse {
   questions: Question[]
+}
+
+// ── API Log (dev inspector) ──
+
+export interface ApiLogEntry {
+  id: string
+  method: string
+  endpoint: string
+  status: number
+  body: string
+  latencyMs: number
+  timestamp: number
 }

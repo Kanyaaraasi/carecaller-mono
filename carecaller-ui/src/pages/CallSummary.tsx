@@ -21,8 +21,10 @@ import {
   RiSkipForwardLine,
   RiArrowLeftLine,
 } from "@remixicon/react"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useCallResponses } from "@/lib/api/hooks"
 import { ThemeToggle } from "@/components/ThemeToggle"
+import { formatTime } from "@/lib/utils"
 import type { CallOutcome } from "@/lib/api/types"
 
 const outcomeBadgeVariant: Record<
@@ -38,17 +40,11 @@ const outcomeBadgeVariant: Record<
   voicemail: "outline",
 }
 
-function formatTime(seconds: number) {
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-}
-
 export function CallSummary() {
   const { callId } = useParams({ from: "/call/$callId/summary" })
   const navigate = useNavigate()
 
-  const { data: callData } = useCallResponses(callId, true)
+  const { data: callData, isLoading, isError } = useCallResponses(callId, true)
 
   const responses = callData?.responses ?? []
   const transcript = callData?.transcript ?? []
@@ -105,6 +101,29 @@ export function CallSummary() {
 
       <ScrollArea className="flex-1">
         <div className="mx-auto max-w-3xl space-y-6 p-6">
+          {isLoading && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 rounded-xl" />
+                ))}
+              </div>
+              <Skeleton className="h-48 rounded-xl" />
+              <Skeleton className="h-64 rounded-xl" />
+            </div>
+          )}
+
+          {isError && (
+            <div className="flex flex-col items-center gap-4 py-16 text-center">
+              <p className="text-muted-foreground text-sm">
+                Failed to load call summary. Is the API running?
+              </p>
+              <Button variant="outline" size="sm" onClick={() => navigate({ to: "/" })}>
+                Back to Home
+              </Button>
+            </div>
+          )}
+
           {/* Overview cards */}
           <div className="grid grid-cols-3 gap-4">
             <Card size="sm">
